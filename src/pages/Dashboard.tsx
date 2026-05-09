@@ -4,9 +4,12 @@ import { searchTracks, getTrackInfo } from '../lib/lastfm'
 import type { Track } from '../lib/lastfm'
 import type { Entry } from '../types/entry'
 import { MOODS } from '../types/entry'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer
+} from 'recharts'
 
 type Page = 'diary' | 'add' | 'stats'
-
 interface Props { userEmail: string }
 
 export default function Dashboard({ userEmail }: Props) {
@@ -15,13 +18,11 @@ export default function Dashboard({ userEmail }: Props) {
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
-  // busca
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Track[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
 
-  // form
   const [mood, setMood] = useState('')
   const [note, setNote] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -63,7 +64,6 @@ export default function Dashboard({ userEmail }: Props) {
     if (!selectedTrack || !mood) return
     setSubmitting(true)
     const { data: { user } } = await supabase.auth.getUser()
-
     await supabase.from('entries').insert({
       user_id: user!.id,
       track_name: selectedTrack.name,
@@ -74,7 +74,6 @@ export default function Dashboard({ userEmail }: Props) {
       note,
       listened_at: date,
     })
-
     setSelectedTrack(null)
     setMood('')
     setNote('')
@@ -97,22 +96,43 @@ export default function Dashboard({ userEmail }: Props) {
 
   const firstName = userEmail.split('@')[0]
 
+  const artistCount = Object.entries(
+    entries.reduce((acc, e) => {
+      acc[e.artist_name] = (acc[e.artist_name] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+  ).sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+  const moodCount = MOODS.map(m => ({
+    ...m,
+    count: entries.filter(e => e.mood === m.value).length
+  })).filter(m => m.count > 0).sort((a, b) => b.count - a.count)
+
+  const moodScore: Record<string, number> = {
+    happy: 5, energetic: 4, calm: 3, nostalgic: 2, sad: 1
+  }
+
+  const last7 = [...entries]
+    .sort((a, b) => new Date(a.listened_at).getTime() - new Date(b.listened_at).getTime())
+    .slice(-7)
+    .map(e => ({
+      date: new Date(e.listened_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      humor: moodScore[e.mood] ?? 3,
+    }))
+
   return (
     <div style={{ fontFamily: "'Nunito', sans-serif" }} className="flex min-h-screen w-full bg-gradient-to-br from-purple-50 to-pink-50">
 
-      {/* Sidebar — desktop */}
       {!isMobile && (
         <aside className="w-56 min-w-[14rem] bg-white flex flex-col py-8 px-4 shadow-sm border-r border-purple-100 sticky top-0 h-screen">
           <div className="mb-8 px-2">
             <h1 className="text-xl font-extrabold text-purple-400">🎵 MoodTunes</h1>
             <p className="text-xs text-gray-400 mt-1">seu diário musical</p>
           </div>
-
           <div className="px-2 mb-6">
             <p className="text-sm font-extrabold text-gray-600">{firstName}</p>
             <p className="text-xs text-gray-400">{userEmail}</p>
           </div>
-
           <nav className="flex flex-col gap-2 flex-1">
             {navItems.map(item => (
               <button key={item.id} onClick={() => setPage(item.id)}
@@ -122,7 +142,6 @@ export default function Dashboard({ userEmail }: Props) {
               </button>
             ))}
           </nav>
-
           <button onClick={() => supabase.auth.signOut()}
             className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold text-gray-400 hover:bg-red-50 hover:text-red-400 transition-all">
             <span>🚪</span> Sair
@@ -130,11 +149,9 @@ export default function Dashboard({ userEmail }: Props) {
         </aside>
       )}
 
-      {/* Main */}
       <main className={`flex-1 overflow-x-hidden ${isMobile ? 'p-4 pb-24' : 'p-8'}`}>
         <div className="max-w-2xl mx-auto flex flex-col gap-6">
 
-          {/* Header */}
           <div className="mb-2">
             <h2 className="text-xl font-extrabold text-gray-700">
               {page === 'diary' && `Olá, ${firstName} 🎵`}
@@ -146,7 +163,7 @@ export default function Dashboard({ userEmail }: Props) {
             </p>
           </div>
 
-          {/* DIARY PAGE */}
+          {/* DIARY */}
           {page === 'diary' && (
             <div className="flex flex-col gap-4">
               {loading ? (
@@ -188,11 +205,9 @@ export default function Dashboard({ userEmail }: Props) {
             </div>
           )}
 
-          {/* ADD PAGE */}
+          {/* ADD */}
           {page === 'add' && (
             <div className="flex flex-col gap-4">
-
-              {/* Busca */}
               {!selectedTrack && (
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100">
                   <h3 className="font-extrabold text-gray-600 mb-4">Buscar música</h3>
@@ -210,7 +225,6 @@ export default function Dashboard({ userEmail }: Props) {
                       {searching ? '...' : '🔍'}
                     </button>
                   </div>
-
                   {results.length > 0 && (
                     <div className="flex flex-col gap-2 mt-4">
                       {results.map((t, i) => (
@@ -232,7 +246,6 @@ export default function Dashboard({ userEmail }: Props) {
                 </div>
               )}
 
-              {/* Música selecionada */}
               {selectedTrack && (
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100">
                   <div className="flex items-center gap-4 mb-6 p-4 bg-purple-50 rounded-2xl">
@@ -252,7 +265,6 @@ export default function Dashboard({ userEmail }: Props) {
                     </button>
                   </div>
 
-                  {/* Humor */}
                   <h3 className="font-extrabold text-gray-600 mb-3">Como você tá se sentindo?</h3>
                   <div className="flex gap-2 flex-wrap mb-4">
                     {MOODS.map(m => (
@@ -263,7 +275,6 @@ export default function Dashboard({ userEmail }: Props) {
                     ))}
                   </div>
 
-                  {/* Nota */}
                   <textarea
                     placeholder="Uma nota sobre esse momento... (opcional)"
                     value={note}
@@ -272,7 +283,6 @@ export default function Dashboard({ userEmail }: Props) {
                     className="w-full border-2 border-purple-100 rounded-2xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-purple-300 transition resize-none mb-4"
                   />
 
-                  {/* Data */}
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
                     className="w-full border-2 border-purple-100 rounded-2xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-purple-300 transition mb-4" />
 
@@ -285,19 +295,103 @@ export default function Dashboard({ userEmail }: Props) {
             </div>
           )}
 
-          {/* STATS PAGE */}
+          {/* STATS */}
           {page === 'stats' && (
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100 text-center">
-              <p className="text-4xl mb-3">📊</p>
-              <p className="font-extrabold text-gray-600">Estatísticas chegando em breve!</p>
-              <p className="text-sm text-gray-400 mt-1">Vamos implementar na Fase 3.</p>
+            <div className="flex flex-col gap-6">
+              {entries.length === 0 ? (
+                <div className="bg-white rounded-3xl p-8 text-center border border-purple-100 shadow-sm">
+                  <p className="text-4xl mb-3">📊</p>
+                  <p className="font-extrabold text-gray-600">Adicione músicas pra ver as estatísticas!</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-purple-100">
+                      <p className="text-xs font-bold text-gray-400 mb-1">Total de músicas</p>
+                      <p className="text-3xl font-extrabold text-purple-400">{entries.length}</p>
+                    </div>
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-purple-100">
+                      <p className="text-xs font-bold text-gray-400 mb-1">Artistas únicos</p>
+                      <p className="text-3xl font-extrabold text-pink-400">
+                        {new Set(entries.map(e => e.artist_name)).size}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100">
+                    <h3 className="font-extrabold text-gray-600 mb-4">Humor mais frequente</h3>
+                    <div className="flex flex-col gap-3">
+                      {moodCount.map(m => (
+                        <div key={m.value} className="flex items-center gap-3">
+                          <span className="text-xl w-8">{m.emoji}</span>
+                          <div className="flex-1">
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm font-bold text-gray-600">{m.label}</span>
+                              <span className="text-sm font-bold text-gray-400">{m.count}</span>
+                            </div>
+                            <div className="w-full bg-purple-50 rounded-full h-2">
+                              <div
+                                className="bg-purple-300 h-2 rounded-full transition-all"
+                                style={{ width: `${(m.count / entries.length) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {artistCount.length > 0 && (
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100">
+                      <h3 className="font-extrabold text-gray-600 mb-4">Artistas mais ouvidos</h3>
+                      <div className="flex flex-col gap-3">
+                        {artistCount.map(([artist, count], i) => (
+                          <div key={artist} className="flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-500 text-xs font-extrabold flex items-center justify-center flex-shrink-0">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1">
+                              <div className="flex justify-between mb-1">
+                                <span className="text-sm font-bold text-gray-600 truncate">{artist}</span>
+                                <span className="text-sm font-bold text-gray-400 flex-shrink-0 ml-2">{count}</span>
+                              </div>
+                              <div className="w-full bg-pink-50 rounded-full h-2">
+                                <div
+                                  className="bg-pink-300 h-2 rounded-full transition-all"
+                                  style={{ width: `${(count / artistCount[0][1]) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-white rounded-3xl p-6 shadow-sm border border-purple-100">
+                    <h3 className="font-extrabold text-gray-600 mb-4">Humor nas últimas músicas</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={last7}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f0ff" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => ['😢', '🌙', '😌', '⚡', '😊'][v - 1]} />
+                        <Tooltip formatter={(v: unknown) => {
+                          const labels = ['', 'Triste', 'Nostálgica', 'Calma', 'Animada', 'Feliz']
+                          return labels[Number(v)] ?? v
+                        }} />
+                        <Line type="monotone" dataKey="humor" stroke="#c084fc" strokeWidth={3} dot={{ fill: '#c084fc', r: 5 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
         </div>
       </main>
 
-      {/* Bottom nav — mobile */}
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-purple-100 flex justify-around py-3 z-50">
           {navItems.map(item => (
